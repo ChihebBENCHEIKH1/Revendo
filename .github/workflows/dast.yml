@@ -63,7 +63,7 @@ jobs:
           [ -n "$header" ] || { echo "::error::MONITOR_ONLY is not in effect — the scan would be testing the WAF, not the app"; exit 1; }
 
       - name: ZAP baseline — marketplace
-        uses: zaproxy/action-baseline@v0.12.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: 'http://localhost:8080'
           rules_file_name: .zap/rules.tsv
@@ -73,7 +73,7 @@ jobs:
           artifact_name: zap-marketplace
 
       - name: ZAP baseline — control plane API
-        uses: zaproxy/action-baseline@v0.12.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: 'http://localhost:8081/listings'
           rules_file_name: .zap/rules.tsv
