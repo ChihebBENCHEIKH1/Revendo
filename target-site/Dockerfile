@@ -1,6 +1,6 @@
 # Multi-stage: the toolchain that builds this image never ships in it.
 # The runtime layer carries production node_modules and compiled JS — nothing else.
-FROM node:20-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 WORKDIR /app
 
 # Copy manifests first so `npm ci` is cached independently of source changes.
@@ -13,7 +13,7 @@ COPY src ./src
 RUN npm run build
 
 
-FROM node:20-bookworm-slim AS runtime
+FROM node:26-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
