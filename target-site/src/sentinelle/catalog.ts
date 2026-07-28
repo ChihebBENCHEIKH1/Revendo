@@ -113,13 +113,13 @@ const TRANSPORT: SignalSpec[] = [
     // requires actually executing JavaScript, which is a categorically more
     // expensive thing to fake. It is the ceiling on header spoofing.
     weight: 40,
-    description: 'Programmatic API call from a session that was served HTML but never ran its script',
+    description: 'Session was served HTML but never fetched the script the page references',
     rationale:
-      'The single most reliable way to catch a client that fakes headers well but has no browser. ' +
-      'A real browser that loads a page executes the script in it; a session that received the ' +
-      'probe, never reported, and then calls the API directly did not run any JavaScript at all. ' +
-      'Timing-independent, because it keys on the request carrying no Fetch Metadata rather than ' +
-      'on how quickly telemetry arrived.',
+      'The most reliable way to catch a client that fakes headers well but has no browser. ' +
+      'Every page carries <script src="/probe.js">; anything that parses HTML fetches it, and ' +
+      'anything that treats the response as a string does not. Neither racy nor origin-dependent ' +
+      '— the fetch happens during page load, and behaves identically on HTTP and HTTPS, which is ' +
+      'more than can be said for the Sec-Fetch headers an earlier version of this check relied on.',
     counteredBy: 'run an actual browser — worker/src/cdp/session.ts',
   },
   {

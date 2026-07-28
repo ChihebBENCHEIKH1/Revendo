@@ -124,10 +124,21 @@ export function attachSession(store: SentinelleStore) {
       // new HTML route cannot forget to opt in.
       res.on('finish', () => {
         const type = res.getHeader('content-type');
+        let changed = false;
+
         if (typeof type === 'string' && type.includes('text/html')) {
           session.htmlServed = (session.htmlServed ?? 0) + 1;
-          void store.saveSession(session);
+          changed = true;
         }
+        // The probe fetch is the proof that an HTML parser ran — see
+        // inspectProbeSilence. Counted here rather than in a route so it stays true
+        // however the static middleware is reorganised.
+        if (req.path === '/probe.js' && res.statusCode < 400) {
+          session.probeFetched = (session.probeFetched ?? 0) + 1;
+          changed = true;
+        }
+
+        if (changed) void store.saveSession(session);
       });
 
       await store.saveSession(session);
@@ -142,44 +153,44 @@ export function attachSession(store: SentinelleStore) {
 }
 
 /**
- * Did this session ever run the script we sent it?
+ * Was this session ever a browser at all?
  *
- * This is the check that actually separates "browser" from "HTTP client that has
- * read a blog post about headers". A client can copy Chrome's header order, its
- * Client Hints and its Accept-Encoding perfectly and still fail here, because
- * passing requires *executing JavaScript*, which is a different and much more
- * expensive thing than formatting a request.
+ * This is the check that separates "browser" from "HTTP client that read a blog post
+ * about headers". Every page Vitrine serves carries `<script src="/probe.js">`. A
+ * client that parses HTML fetches it; a client that treats the response as a string
+ * does not. No amount of header formatting substitutes for having an HTML parser.
  *
- * Two conditions, and both matter:
+ * ## Why the discriminator is the script fetch and not something cleverer
  *
- *  - **The session was served HTML.** Every page carries the probe. A session that
- *    has never seen a page has nothing to be silent about, so a first request is
- *    never penalised.
- *  - **The request carries no Fetch Metadata.** This is what makes the check
- *    timing-independent, and it is the part that took a false positive to get right.
- *    Keying on "no telemetry yet" alone would flag a fast browser that submits a
- *    form before its probe round-trip lands. A browser-issued request always carries
- *    Sec-Fetch-*, so requiring its absence means only a genuinely programmatic call
- *    can trip this — no race, no grace period to tune.
+ * Two earlier versions of this check were wrong, both in the same way, and both only
+ * showed up by running the demo:
+ *
+ *  - **"No telemetry yet"** flags a fast browser that navigates again before its
+ *    first telemetry POST lands. A race, tunable only with a grace period that is
+ *    either too short (false positives) or too long (raw-http finishes in 0.1s and
+ *    slips under it).
+ *  - **"No Sec-Fetch metadata"** looked timing-independent and was worse: Chrome does
+ *    not send Sec-Fetch on a plain-HTTP origin *at all*, so on this deployment every
+ *    real browser looked programmatic and scored 40 points for it.
+ *
+ * Fetching a subresource is neither racy nor origin-dependent. It happens during page
+ * load, before anything the client does next, and it is the same on HTTP and HTTPS.
+ *
+ * The signal is deliberately about *fetching* rather than *executing*. Fetching
+ * proves an HTML parser ran, which is already conclusive, and it avoids penalising
+ * the narrow case of a real browser whose telemetry POST failed in flight.
  */
-export function inspectProbeSilence(req: Request, session: SessionRecord): Detection[] {
+export function inspectProbeSilence(_req: Request, session: SessionRecord): Detection[] {
   const servedHtml = (session.htmlServed ?? 0) > 0;
-  const ranScript = (session.telemetryReceived ?? 0) > 0;
+  const fetchedProbe = (session.probeFetched ?? 0) > 0;
 
-  // "Browser-issued" means the *complete* Fetch Metadata set, not any of it.
-  // Node's fetch sends `sec-fetch-mode` alone, so an any-of check hands every
-  // undici-based client a free pass — which is exactly what it did on the first run.
-  // Chrome attaches site, mode and dest to every request it makes.
-  const browserIssued =
-    Boolean(req.get('sec-fetch-site')) &&
-    Boolean(req.get('sec-fetch-mode')) &&
-    Boolean(req.get('sec-fetch-dest'));
-
-  if (servedHtml && !ranScript && !browserIssued) {
+  // A session that has not been served a page has nothing to be silent about, so a
+  // first request is never penalised.
+  if (servedHtml && !fetchedProbe) {
     return [
       {
         id: 'probe.silent',
-        evidence: `${session.htmlServed} page(s) served, 0 telemetry reports, no Sec-Fetch on ${req.method} ${req.path}`,
+        evidence: `${session.htmlServed} page(s) served, probe.js never requested`,
         at: Date.now(),
       },
     ];

@@ -72,9 +72,11 @@ export interface SessionRecord {
   /** Set once the session has been served a challenge, so we can tell recovery from luck. */
   challengedAt?: number;
   solvedAt?: number;
-  /** HTML pages served to this session — each one carried the probe script. */
+  /** HTML pages served to this session — each one carried the probe script tag. */
   htmlServed?: number;
-  /** Telemetry reports received. Zero after an HTML page means no JavaScript ran. */
+  /** Requests for /probe.js. Zero after an HTML page means nothing parsed the HTML. */
+  probeFetched?: number;
+  /** Telemetry reports received. Proof that JavaScript executed, not merely loaded. */
   telemetryReceived?: number;
 }
 

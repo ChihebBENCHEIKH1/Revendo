@@ -37,10 +37,16 @@ thing that changes is how they touch the page.
 
 Those are measured numbers from an actual run, not illustrations.
 
+![The Sentinelle console: one allowed session at 0, two blocked at 79 and 68, with every signal, its weight and the evidence that raised it](docs/img/sentinelle-console.png)
+
+*Every signal, its layer, its weight and the evidence that raised it — streaming in
+live. Regenerate with `make screenshot`, which drives the worker's own Chrome at the
+dashboard, so the image in this README cannot quietly go stale.*
+
 - **`raw-http`** (68, blocked, 0.1s) — plain `fetch()`. Dies on transport signals
-  before any JavaScript runs. The heaviest hit is `probe.silent`: it was served a
-  page carrying the detector's script, never executed it, and then called the API
-  directly. You can fake every header; you cannot fake having run JavaScript.
+  before any JavaScript runs. The heaviest hit is `probe.silent`: every page carries
+  `<script src="/probe.js">`, anything with an HTML parser fetches it, and this client
+  never did. You can fake every header; you cannot fake having an HTML parser.
 - **`naive`** (79, blocked, 1.3s) — real Chrome over CDP, but `element.click()` and
   `el.value = "…"`. Challenged on transport at 47, and the probe running on the
   interstitial then pushed it to 79 on fingerprint and behaviour.
