@@ -240,7 +240,7 @@ jobs:
       # An SBOM you generate and discard proves nothing. Retaining it per build is
       # what makes "is this affected?" answerable on the day a CVE lands, without
       # rebuilding an image whose base tag has since moved.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom-${{ matrix.service }}
           path: sbom-${{ matrix.service }}.cyclonedx.json
