@@ -114,10 +114,16 @@ jobs:
           java-version: '17'
 
       # setup-java provides a JDK, not Gradle — and this repo deliberately has no
-      # wrapper (the Dockerfile uses the gradle image instead), so the build step has
-      # nothing to invoke without this.
+      # wrapper (the Dockerfile builds inside the gradle image instead).
+      #
+      # gradle-version is required for exactly that reason: setup-gradle defaults to
+      # invoking the project's wrapper, so without an explicit version there is still
+      # no `gradle` on PATH and the build step fails the same way it did before.
+      # Pinned to the version the Dockerfile uses, so CI and the image agree.
       - uses: gradle/actions/setup-gradle@v4
         if: matrix.language == 'java-kotlin'
+        with:
+          gradle-version: '8.10'
 
       - uses: github/codeql-action/init@v3
         with:
