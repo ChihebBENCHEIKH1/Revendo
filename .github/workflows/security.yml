@@ -113,6 +113,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # setup-java provides a JDK, not Gradle — and this repo deliberately has no
+      # wrapper (the Dockerfile uses the gradle image instead), so the build step has
+      # nothing to invoke without this.
+      - uses: gradle/actions/setup-gradle@v4
+        if: matrix.language == 'java-kotlin'
+
       - uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
@@ -141,7 +147,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scanners: vuln,secret,misconfig
@@ -159,7 +165,7 @@ jobs:
           category: trivy-fs
 
       - name: Fail on HIGH or CRITICAL
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scanners: vuln
@@ -186,7 +192,7 @@ jobs:
         run: docker build -t revendo-${{ matrix.service }}:scan ${{ matrix.service }}
 
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: revendo-${{ matrix.service }}:scan
           format: sarif
@@ -220,7 +226,7 @@ jobs:
       # `apt-get upgrade`, and control-plane pins the Netty and Jackson BOMs, so the
       # inherited surface is kept small rather than merely tolerated.
       - name: Summarise image findings (non-blocking)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: revendo-${{ matrix.service }}:scan
           severity: HIGH,CRITICAL
