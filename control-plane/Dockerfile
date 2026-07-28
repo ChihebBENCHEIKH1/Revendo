@@ -1,6 +1,6 @@
 # Build with the Gradle image so the repo needs no committed wrapper JAR and the
 # host needs no JDK — `docker compose up` is the only prerequisite.
-FROM gradle:8.10-jdk17 AS build
+FROM gradle:9.6-jdk17 AS build
 WORKDIR /home/gradle/project
 
 # Build files first: dependency resolution is the slow step, and it only needs to
