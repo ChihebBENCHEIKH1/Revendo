@@ -1,0 +1,35 @@
+# ZAP baseline rule tuning.
+#
+# Columns: rule-id	action	(optional) note
+#   IGNORE = never report   WARN = report, do not fail   FAIL = break the build
+#
+# Every IGNORE below names why. An untuned baseline scan reports the same handful of
+# header findings on every run, people stop reading it, and the one real finding
+# arrives in a list nobody opens — so tuning is what keeps the signal alive, not a
+# way of hiding results.
+
+# Vitrine is a deliberately vulnerable-ish demo marketplace served over plain HTTP
+# inside a compose network. HSTS on a non-TLS origin is not actionable.
+10035	IGNORE	(HSTS) no TLS terminator in the demo topology
+
+# The dashboard and marketplace are server-rendered with no third-party assets and
+# no user-supplied HTML. CSP is still worth adding; it is not worth failing a PR
+# that did not touch it.
+10038	WARN	(CSP) tracked, not blocking
+
+# The probe is served unminified and deliberately readable — see docs/ANTI-BOT.md.
+# "JS file disclosure" is the intended design, not a finding.
+10027	IGNORE	(information disclosure in JS) probe.js is public by design
+
+# Timestamp disclosure fires on every epoch-ms value in the telemetry API, which is
+# the wire format, not a leak.
+10096	IGNORE	(timestamp disclosure) epoch ms is part of the documented API
+
+# These must never be downgraded — they are the findings this scan exists for.
+40012	FAIL	reflected XSS
+40014	FAIL	persistent XSS
+40018	FAIL	SQL injection
+90019	FAIL	server-side code injection
+90020	FAIL	remote OS command injection
+40003	FAIL	CRLF injection
+10202	FAIL	absence of anti-CSRF tokens on state-changing forms

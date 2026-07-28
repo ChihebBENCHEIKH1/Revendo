@@ -1,0 +1,142 @@
+# The whole system, offline.
+#
+# No API keys, no external services, no network egress required. `make demo` brings
+# this up and runs the comparison end to end. Every service has a healthcheck and
+# every dependency uses `condition: service_healthy`, because `depends_on` alone only
+# waits for the *container* to start — not for the process inside it to be ready, and
+# a worker that races ahead of RabbitMQ fails in a way that looks like a code bug.
+
+name: revendo
+
+services:
+  redis:
+    image: redis:7-alpine
+    # appendonly off: this is a demo whose state is meant to be disposable, and
+    # `make reset` should genuinely reset it.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    networks: [revendo]
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      # Management UI — worth opening during the demo to watch the retry ladder fill.
+      - "15672:15672"
+    healthcheck:
+      # `ping` only proves the broker process is up; `check_running` proves it will
+      # accept a connection, which is what the consumers actually need.
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
+    networks: [revendo]
+
+  # ---------------------------------------------------------------------------
+  # Vitrine — the marketplace, guarded by Sentinelle.
+  # ---------------------------------------------------------------------------
+  target-site:
+    build:
+      context: ./target-site
+    environment:
+      PORT: "8080"
+      REDIS_URL: "redis://redis:6379"
+      LOG_LEVEL: "info"
+      RATE_CAPACITY: "30"
+      RATE_REFILL_PER_SECOND: "0.5"
+      EXPECTED_TZ_REGION: "Europe"
+      # Flip to "true" to watch Sentinelle score without enforcing — the mode every
+      # real deployment starts in.
+      MONITOR_ONLY: "${MONITOR_ONLY:-false}"
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    networks: [revendo]
+
+  # ---------------------------------------------------------------------------
+  # Control plane — Kotlin/Ktor. Owns the lifecycle, the queue topology and the
+  # rate budget.
+  # ---------------------------------------------------------------------------
+  control-plane:
+    build:
+      context: ./control-plane
+    environment:
+      PORT: "8081"
+      REDIS_URL: "redis://redis:6379"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+      MARKETPLACE_RATE_CAPACITY: "20"
+      MARKETPLACE_RATE_REFILL_PER_SECOND: "0.4"
+      MAX_PUBLISH_ATTEMPTS: "3"
+      # Optional. Absent means the negotiation agent runs its deterministic stub,
+      # which is the default demo path.
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      ANTHROPIC_MODEL: "${ANTHROPIC_MODEL:-claude-opus-5}"
+    ports:
+      - "8081:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/healthz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 30s
+    networks: [revendo]
+
+  # ---------------------------------------------------------------------------
+  # Browser worker.
+  #
+  # Behind a compose profile so it does not start with `make up` — the demo drives
+  # it with `docker compose run`, one profile at a time, so each run is isolated and
+  # its output is readable. `make up-fleet` starts it as a long-lived queue consumer.
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: ./worker
+    profiles: ["fleet"]
+    environment:
+      TARGET_BASE_URL: "http://target-site:8080"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+      REDIS_URL: "redis://redis:6379"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      PROFILE: "${PROFILE:-stealth}"
+      CHROME_PATH: "/usr/bin/chromium"
+      HEADLESS: "true"
+      CONCURRENCY: "2"
+      # Set BEHAVIOR_SEED to make a run byte-for-byte reproducible. Left unset so
+      # each container draws its own entropy — a fleet sharing one seed would
+      # produce identical mouse paths, which is a fingerprint in its own right.
+      BEHAVIOR_SEED: "${BEHAVIOR_SEED:-}"
+    # Chrome will exceed Docker's default 64MB /dev/shm and die with an opaque
+    # renderer crash. This is the single most common way containerised Chrome fails.
+    shm_size: "1gb"
+    depends_on:
+      target-site:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [revendo]
+
+networks:
+  revendo:
+    driver: bridge

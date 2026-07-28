@@ -1,0 +1,187 @@
+# Build, test, and prove the demo still does what the README says.
+#
+# The last job is the one that matters. Unit tests confirm the pieces behave; the
+# e2e gate confirms the *claim* — that a naive client gets blocked and a stealth
+# client gets through. Every other check in this pipeline could pass while that
+# quietly stopped being true.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A superseded push should not keep burning runners. Cancel in-flight runs for the
+# same ref, except on main where every commit's result is worth keeping.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# Default to read-only. Jobs that need more say so explicitly — a workflow that
+# grants write at the top hands every third-party action in it a write token.
+permissions:
+  contents: read
+
+jobs:
+  typescript:
+    name: typescript · ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [worker, target-site]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ${{ matrix.service }}/package.json
+
+      - name: Install
+        working-directory: ${{ matrix.service }}
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        working-directory: ${{ matrix.service }}
+        # Includes the test files, which the production build deliberately excludes —
+        # so a test that has drifted from an interface still fails here rather than
+        # passing at runtime because tsx does not typecheck.
+        run: npx tsc -p tsconfig.json --noEmit --skipLibCheck false || npx tsc -p tsconfig.json --noEmit
+
+      - name: Test
+        working-directory: ${{ matrix.service }}
+        run: npx tsx --test $(find src -name '*.test.ts' | sort | tr '\n' ' ')
+
+  kotlin:
+    name: kotlin · control-plane
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Test
+        working-directory: control-plane
+        run: gradle test --console=plain
+
+      - name: Build
+        working-directory: control-plane
+        run: gradle installDist --console=plain
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: kotlin-test-report
+          path: control-plane/build/reports/tests/test
+          retention-days: 7
+
+  images:
+    name: images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build all three
+        run: docker compose build
+
+      # Keep the layer cache for the e2e job rather than rebuilding Chromium twice.
+      - name: Save images
+        run: |
+          docker save revendo-target-site revendo-worker revendo-control-plane \
+            | gzip > /tmp/revendo-images.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: images
+          path: /tmp/revendo-images.tar.gz
+          retention-days: 1
+
+  e2e:
+    name: e2e · the claim still holds
+    runs-on: ubuntu-latest
+    needs: images
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: images
+          path: /tmp
+
+      - name: Load images
+        run: gunzip -c /tmp/revendo-images.tar.gz | docker load
+
+      - name: Start the stack
+        run: |
+          docker compose up -d redis rabbitmq target-site control-plane
+          # Compose healthchecks gate the dependent services, but this job talks to
+          # the site directly, so it waits on the same condition itself.
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/healthz >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8080/healthz
+
+      - name: Reset detector state
+        run: curl -fsS -X POST http://localhost:8080/__sentinelle/reset
+
+      # Each profile asserts a specific outcome. These are the regression gates for
+      # the two halves of the project: if the detector weakens, `naive` stops being
+      # blocked; if the stealth layer breaks, `stealth` stops publishing. Either is a
+      # failure worth stopping a merge for.
+      - name: raw-http must be blocked
+        run: |
+          out=$(PROFILE=raw-http docker compose run --rm -T worker node dist/cli.js)
+          echo "$out"
+          echo "$out" | grep -q "BLOCKED" || { echo "::error::raw-http was not blocked"; exit 1; }
+
+      - name: naive must be blocked
+        run: |
+          out=$(PROFILE=naive docker compose run --rm -T worker node dist/cli.js)
+          echo "$out"
+          echo "$out" | grep -q "BLOCKED" || { echo "::error::naive browser was not blocked"; exit 1; }
+
+      - name: stealth must publish
+        env:
+          # Pinned so a CI failure is reproducible locally with the same seed instead
+          # of being a coin flip on the behaviour RNG.
+          BEHAVIOR_SEED: ci-${{ github.run_id }}
+        run: |
+          out=$(PROFILE=stealth docker compose run --rm -T worker node dist/cli.js)
+          echo "$out"
+          echo "$out" | grep -q "PUBLISHED" || { echo "::error::stealth run failed to publish"; exit 1; }
+
+      - name: Detector coverage is still complete
+        # The unit test compares patches against a checked-in list; this compares them
+        # against the catalog the running service actually serves, which is the only
+        # version that can be out of date with both.
+        run: |
+          curl -fsS http://localhost:8080/__sentinelle/catalog > /tmp/catalog.json
+          node -e '
+            const catalog = require("/tmp/catalog.json");
+            const ids = catalog.map(s => s.id);
+            const missing = ids.filter(id => !catalog.find(s => s.id === id).counteredBy);
+            if (missing.length) {
+              console.error("::error::signals with no counterBy: " + missing.join(", "));
+              process.exit(1);
+            }
+            console.log(`${ids.length} signals, all with a named counter-measure`);
+          '
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: docker compose logs --tail=200
+
+      - name: Tear down
+        if: always()
+        run: docker compose --profile fleet down --volumes --remove-orphans

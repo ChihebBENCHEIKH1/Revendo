@@ -1,0 +1,109 @@
+# Claude-assisted review on pull requests.
+#
+# Scoped deliberately narrowly. An AI reviewer that comments on style competes with
+# the linter and trains people to skim its output; this one is pointed at the three
+# things this codebase gets wrong in ways a linter cannot see:
+#
+#   1. A stealth patch that introduces a *new* detectable artefact (the
+#      `fp.function_tostring_tampered` failure mode — evasion that is louder than
+#      doing nothing).
+#   2. A detector signal that would fire on legitimate traffic. Two of these shipped
+#      during development and were only caught by running the demo: scoring absent
+#      Sec-Fetch headers on a plain-HTTP origin, and scoring a Docker bridge IP as
+#      datacenter space.
+#   3. A change to the state machine that breaks a retry, idempotency or floor
+#      invariant.
+#
+# It advises. It has `pull-requests: write` to comment and nothing else — no
+# `contents: write`, so it cannot push, and its review is not a required check.
+
+name: ai-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: claude review
+    runs-on: ubuntu-latest
+    # Skip cleanly on forks and on repos with no key configured, rather than failing
+    # every PR with a red X about a missing secret.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for API key
+        id: key
+        run: |
+          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ANTHROPIC_API_KEY not set — skipping AI review"
+          fi
+
+      - name: Review
+        if: steps.key.outputs.present == 'true'
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this pull request against revendo's specific failure modes. Read
+            docs/ANTI-BOT.md first for the threat model — it explains why several of
+            these are counterintuitive.
+
+            Report only things that are concretely wrong. No style commentary, no
+            "consider extracting a helper", no summary of what the diff does. If the
+            diff is fine, say so in one line.
+
+            Check, in priority order:
+
+            1. **Stealth patches that add a detectable artefact.** Any new
+               `Object.defineProperty` or method override in worker/src/stealth must
+               go through `asNative` / `defineGetter` / `wrapMethod` from
+               nativeShim.ts. A raw redefinition leaves a non-native function where
+               the engine guarantees a native one, which is a *stronger* signal than
+               the thing it was hiding. Also flag: canvas or WebGL noise that is
+               randomised per call rather than per identity (a detector that reads
+               twice gets two answers, which no real browser does), and any value
+               that is hardcoded rather than derived from the Identity — a fleet that
+               shares a fingerprint is a fleet that gets unmasked at once.
+
+            2. **Detector signals that would fire on legitimate traffic.** In
+               target-site/src/sentinelle, flag any check that penalises a client for
+               something the platform did not let it do: secure-context-only headers
+               (Sec-Fetch-*, Sec-CH-UA) or APIs (navigator.mediaDevices) scored on a
+               plain-HTTP origin; IP-reputation checks that do not exempt RFC1918;
+               behavioural statistics computed on a sample too small to mean anything.
+               Both of the first two shipped as bugs here.
+
+            3. **State machine invariants** in
+               control-plane/src/main/kotlin/com/revendo/domain. `transition` must
+               stay pure — no clock, no randomness, no IO except through
+               TransitionContext. A blocked publish must retire the identity before
+               scheduling a retry. An accepted offer below `floorCents` must not
+               produce a Sold state. Retry effects must be returned as data, never
+               performed inline.
+
+            4. **Concurrency and correctness**: Redis read-modify-write where a Lua
+               script or CAS is needed; RabbitMQ publishes without confirms; an
+               idempotency key released on a path where the operation actually
+               succeeded; unbounded `launch` without prefetch backpressure.
+
+            For each finding give the file, the line, why it is wrong, and the fix.
+          claude_args: '--max-turns 12'

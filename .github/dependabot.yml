@@ -1,0 +1,49 @@
+# Dependency updates.
+#
+# Grouped rather than one PR per package: ten open PRs a week is how a team learns to
+# ignore Dependabot. Security updates stay ungrouped and immediate — those are the
+# ones that should interrupt.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /worker
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 3
+    groups:
+      dev-dependencies:
+        dependency-type: development
+      production-minor-patch:
+        dependency-type: production
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /target-site
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 3
+    groups:
+      dev-dependencies:
+        dependency-type: development
+      production-minor-patch:
+        dependency-type: production
+        update-types: [minor, patch]
+
+  - package-ecosystem: gradle
+    directory: /control-plane
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 3
+    groups:
+      jvm-minor-patch:
+        update-types: [minor, patch]
+
+  # Actions are the most-overlooked supply chain in a repo: a compromised third-party
+  # action runs with whatever token the job grants it.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: docker
+    directories: [/worker, /target-site, /control-plane]
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 3
