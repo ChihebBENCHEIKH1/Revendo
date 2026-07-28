@@ -302,7 +302,13 @@ docs/            architecture, the anti-bot writeup, ADRs
 
 ## Requirements
 
-Docker with Compose v2. That's it — the toolchains all run in containers.
+Docker with Compose v2. That's it — Node, the JDK, Gradle and Chromium all run in
+containers, so nothing is installed on the host.
 
-First build pulls Chromium and a JDK, so it takes a few minutes. After that,
-`make demo` is about a minute end to end.
+- **First build:** a few minutes; it pulls Chromium and a JDK.
+- **Disk:** ~1.5 GB of images.
+- **After that:** `make demo` is about 90 seconds end to end, ~75s of which is the
+  stealth run deliberately taking its time.
+- **amd64 and arm64** — every base image is multi-arch, so Apple Silicon is fine.
+
+Verified from a clean clone, not just in the directory it was written in.
