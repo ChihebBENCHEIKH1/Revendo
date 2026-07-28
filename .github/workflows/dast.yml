@@ -67,7 +67,7 @@ jobs:
         with:
           target: 'http://localhost:8080'
           rules_file_name: .zap/rules.tsv
-          cmd_options: '-a -j'
+          cmd_options: '-a -j -I'
           allow_issue_writing: false
           fail_action: true
           artifact_name: zap-marketplace
@@ -77,7 +77,7 @@ jobs:
         with:
           target: 'http://localhost:8081/listings'
           rules_file_name: .zap/rules.tsv
-          cmd_options: '-a -j'
+          cmd_options: '-a -j -I'
           allow_issue_writing: false
           fail_action: true
           artifact_name: zap-control-plane
