@@ -14,7 +14,7 @@ COPY --chown=gradle:gradle src ./src
 RUN gradle --no-daemon installDist --quiet
 
 
-FROM eclipse-temurin:17-jre-jammy AS runtime
+FROM eclipse-temurin:25-jre-jammy AS runtime
 WORKDIR /app
 
 # JRE, not JDK: the compiler has no business in a runtime image.
