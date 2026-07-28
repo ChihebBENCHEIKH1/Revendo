@@ -1,0 +1,29 @@
+{
+  "name": "@revendo/worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser worker — drives Chrome over raw CDP, with a toggleable stealth layer and human behaviour emulation.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "run-once": "node dist/cli.js",
+    "dev": "tsx src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.4",
+    "chrome-remote-interface": "^0.33.2",
+    "ioredis": "^5.4.1",
+    "pino": "^9.3.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.5",
+    "@types/chrome-remote-interface": "^0.31.14",
+    "@types/node": "^20.14.10",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3"
+  }
+}

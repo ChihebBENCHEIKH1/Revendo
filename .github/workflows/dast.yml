@@ -1,0 +1,111 @@
+# Dynamic analysis against the running stack.
+#
+# This project has an unusual and instructive problem: **its own DAST scanner is a
+# bot, and it has built an anti-bot system.** ZAP crawls fast, sends no Sec-Fetch
+# metadata, runs no JavaScript, and comes from a datacenter IP — it trips
+# `probe.silent`, `http.datacenter_asn` and the rate limiter within seconds and gets
+# a 403 for the rest of the scan. The report then comes back clean, because the
+# scanner never reached the application.
+#
+# That is the classic false-negative in DAST-behind-a-WAF, and the fix is the same
+# one every real engagement uses: **scan the origin with enforcement off**. Sentinelle
+# still scores every request (`MONITOR_ONLY` reports without blocking), so the scan
+# tests the application, and the detector's own behaviour under the scan is visible
+# in the console afterwards.
+
+name: dast
+
+on:
+  pull_request:
+    paths:
+      - 'target-site/**'
+      - 'control-plane/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/dast.yml'
+  schedule:
+    - cron: '0 4 * * 2'
+  workflow_dispatch:
+
+concurrency:
+  group: dast-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  zap:
+    name: zap baseline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start the stack in monitor mode
+        env:
+          # The whole point — see the header comment. Sentinelle scores every request
+          # and blocks none, so ZAP reaches the application instead of an interstitial.
+          MONITOR_ONLY: 'true'
+        run: |
+          docker compose up -d redis rabbitmq target-site control-plane
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:8080/healthz >/dev/null 2>&1 && break
+            sleep 2
+          done
+          curl -fsS http://localhost:8080/healthz
+          curl -fsS http://localhost:8081/healthz
+
+      - name: Confirm enforcement really is off
+        # A scan that silently ran against a blocking origin produces a clean report
+        # for the wrong reason. Assert the precondition rather than trusting the env.
+        run: |
+          header=$(curl -fsS -o /dev/null -D - http://localhost:8080/ | tr -d '\r' | grep -i '^x-sentinelle-monitor-only:' || true)
+          echo "got: ${header:-<none>}"
+          [ -n "$header" ] || { echo "::error::MONITOR_ONLY is not in effect — the scan would be testing the WAF, not the app"; exit 1; }
+
+      - name: ZAP baseline — marketplace
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: 'http://localhost:8080'
+          rules_file_name: .zap/rules.tsv
+          cmd_options: '-a -j'
+          allow_issue_writing: false
+          fail_action: true
+          artifact_name: zap-marketplace
+
+      - name: ZAP baseline — control plane API
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: 'http://localhost:8081/listings'
+          rules_file_name: .zap/rules.tsv
+          cmd_options: '-a -j'
+          allow_issue_writing: false
+          fail_action: true
+          artifact_name: zap-control-plane
+
+      - name: What the detector made of the scanner
+        # The interesting half of this job. ZAP just generated a few hundred requests
+        # of unmistakably automated traffic; this prints how Sentinelle scored it,
+        # which is a free end-to-end check that monitor mode still detects.
+        if: always()
+        run: |
+          docker compose exec -T target-site node -e "
+            fetch('http://127.0.0.1:8080/__sentinelle/recent').then(r => r.json()).then(events => {
+              const seen = new Map();
+              for (const e of events) if (!seen.has(e.sessionId)) seen.set(e.sessionId, e);
+              const rows = [...seen.values()];
+              const worst = rows.reduce((a, b) => (b.score > (a?.score ?? -1) ? b : a), null);
+              console.log(\`sessions observed during the scan: \${rows.length}\`);
+              if (worst) {
+                console.log(\`worst score: \${worst.score} (\${worst.verdict})\`);
+                for (const d of worst.detections) console.log('  +' + d.weight, d.id, '—', d.evidence);
+              }
+            });
+          " || true
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: docker compose logs --tail=200
+
+      - name: Tear down
+        if: always()
+        run: docker compose --profile fleet down --volumes --remove-orphans

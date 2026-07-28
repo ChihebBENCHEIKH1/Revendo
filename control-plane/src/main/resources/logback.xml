@@ -1,0 +1,24 @@
+<configuration>
+    <!--
+      Console-only, with the call id from the MDC on every line.
+
+      A request that fans out across the control plane, the broker and a worker is
+      only traceable if the correlation id survives every hop — putting it in the
+      pattern here is the cheap half of that; CallId + callIdMdc in Application.kt is
+      the other half.
+    -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %-5level %logger{28} [%X{callId:-—}] - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+
+    <!-- The AMQP client logs every frame at DEBUG; useful once, deafening always. -->
+    <logger name="com.rabbitmq" level="WARN"/>
+    <logger name="io.lettuce" level="WARN"/>
+    <logger name="io.netty" level="WARN"/>
+</configuration>
