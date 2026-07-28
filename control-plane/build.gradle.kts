@@ -37,7 +37,7 @@ dependencies {
     // the whole service is coroutine-based. A blocking client would force every Redis
     // call onto a thread pool and quietly reintroduce the thread-per-request model
     // coroutines exist to avoid.
-    implementation("io.lettuce:lettuce-core:6.4.0.RELEASE")
+    implementation("io.lettuce:lettuce-core:7.6.0.RELEASE")
     implementation("io.micrometer:micrometer-registry-prometheus:1.13.4")
     implementation("ch.qos.logback:logback-classic:1.5.8")
 
