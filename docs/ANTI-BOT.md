@@ -71,6 +71,38 @@ build can emit** — which is stronger evidence than either header alone.
 alongside the UA string. Both come from the same persona object in
 [`proxy/pool.ts`](../worker/src/proxy/pool.ts), so they cannot drift.
 
+### `probe.silent` — the ceiling on header spoofing
+
+The heaviest signal in the catalog (weight 40), and the only transport check that
+cannot be satisfied by formatting a request more carefully.
+
+Every page Vitrine serves carries `<script src="/probe.js">`. Anything with an HTML
+parser fetches it. Anything that treats the response as a string does not.
+
+```ts
+if (servedHtml && !fetchedProbe) raise('probe.silent', ...);
+```
+
+That is the whole check, and getting to it took two wrong versions — both of which
+only surfaced by running the demo, and both of which are the same mistake:
+
+- **"No telemetry yet."** Flags a fast browser that navigates again before its first
+  telemetry POST lands. Racy, and the obvious fix (a grace period) is unwinnable:
+  long enough to avoid the race is long enough for a 0.1-second raw-HTTP run to slip
+  under it.
+- **"No Sec-Fetch metadata."** Looked timing-independent, and was worse — Chrome does
+  not send Sec-Fetch on a plain-HTTP origin at all, so every real browser on this
+  deployment looked programmatic and scored 40 points for it.
+
+A subresource fetch is neither racy nor origin-dependent. And the signal is
+deliberately about *fetching* rather than *executing*: fetching already proves an
+HTML parser ran, and it avoids penalising a browser whose telemetry POST failed in
+flight.
+
+This is also the one signal in the catalog with no counter-measure in
+`worker/src/stealth`. The answer to it is "run an actual browser", which is precisely
+why the `raw-http` profile exists and why it is the one that never gets through.
+
 ### Rate and egress
 
 A Redis token bucket per egress IP, and an ASN class check. Residential proxies exist

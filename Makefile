@@ -22,7 +22,7 @@ RED   := \033[31m
 OFF   := \033[0m
 
 .PHONY: help demo demo-raw demo-naive demo-stealth up up-fleet down clean logs reset \
-        scoreboard console test test-worker test-site test-control build ps
+        scoreboard console screenshot test test-worker test-site test-control build ps
 
 help: ## Show this help
 	@printf "$(BOLD)$(CYAN)revendo$(OFF) — a scraping control plane and the anti-bot system it has to beat\n\n"
@@ -97,6 +97,11 @@ logs: ## Tail logs from every running service
 
 ps: ## Show service status
 	@$(COMPOSE) --profile fleet ps
+
+screenshot: ## Regenerate the README console image from the live dashboard
+	@mkdir -p docs/img
+	@$(COMPOSE) run --rm -T -v "$$PWD/docs/img:/out" -v "$$PWD/ops:/app/ops:ro" \
+	  worker node /app/ops/screenshot.mjs
 
 console: ## Open the Sentinelle console
 	@(command -v xdg-open >/dev/null && xdg-open http://localhost:8080/__sentinelle) \

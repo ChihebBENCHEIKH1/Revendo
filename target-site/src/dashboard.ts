@@ -45,8 +45,10 @@ main{padding:18px 22px;display:grid;gap:12px;max-width:1200px}
 .who{color:var(--muted);font-size:12px}
 .who b{color:var(--ink);font-weight:600}
 .sig{margin-top:12px;display:grid;gap:5px}
-.row{display:grid;grid-template-columns:74px 34px 1fr;gap:10px;align-items:baseline;font-size:12px}
-.layer{font-size:9.5px;letter-spacing:.9px;text-transform:uppercase;padding:2px 5px;border-radius:3px;text-align:center;color:#0b0e14;font-weight:700}
+/* 92px, not 74: "FINGERPRINT" is the longest layer name and was being clipped to
+   "FINGERPRIN" — which looked like a rendering bug in every screenshot of it. */
+.row{display:grid;grid-template-columns:92px 34px 1fr;gap:10px;align-items:baseline;font-size:12px}
+.layer{font-size:9.5px;letter-spacing:.9px;text-transform:uppercase;padding:2px 5px;border-radius:3px;text-align:center;color:#0b0e14;font-weight:700;white-space:nowrap}
 .layer.transport{background:#60a5fa} .layer.fingerprint{background:#c084fc} .layer.behavior{background:#fbbf24}
 .w{color:var(--bad);font-weight:700;text-align:right}
 .desc{color:var(--ink)} .ev{color:var(--muted)}
