@@ -21,9 +21,9 @@
   },
   "devDependencies": {
     "@types/amqplib": "^0.10.5",
-    "@types/chrome-remote-interface": "^0.31.14",
-    "@types/node": "^20.14.10",
+    "@types/chrome-remote-interface": "^0.34.0",
+    "@types/node": "^26.1.2",
     "tsx": "^4.16.2",
-    "typescript": "^5.5.3"
+    "typescript": "^7.0.2"
   }
 }
