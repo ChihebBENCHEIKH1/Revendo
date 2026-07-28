@@ -4,7 +4,7 @@
 
 Two halves that were built against each other:
 
-- **Sentinelle** — a bot-detection engine. 31 signals across transport, browser
+- **Sentinelle** — a bot-detection engine. 32 signals across transport, browser
   fingerprint and behaviour, combined with a noisy-OR, guarding a fake French resale
   marketplace.
 - **The worker** — a browser automation stack that drives Chrome over raw CDP, with a
@@ -217,7 +217,7 @@ Details worth a look if you only read code:
 
 ## Pipeline
 
-[`.github/workflows/`](.github/workflows/) — four workflows, least-privilege by
+[`.github/workflows/`](.github/workflows/) — three workflows, least-privilege by
 default, findings to the Security tab as SARIF and the build failing only on
 HIGH/CRITICAL. A gate that cries wolf gets switched off in week three.
 
@@ -226,7 +226,6 @@ HIGH/CRITICAL. A gate that cries wolf gets switched off in week three.
 | [`ci.yml`](.github/workflows/ci.yml) | typecheck + 56 tests across three languages, image builds, **and an e2e gate that asserts the claim**: naive must be blocked, stealth must publish. Everything else can be green while that quietly stops being true. |
 | [`security.yml`](.github/workflows/security.yml) | Gitleaks (full history), Semgrep + CodeQL for TS *and* Kotlin, Trivy filesystem and per-image scans, Hadolint, CycloneDX SBOMs retained 90 days |
 | [`dast.yml`](.github/workflows/dast.yml) | OWASP ZAP against the live stack |
-| [`ai-review.yml`](.github/workflows/ai-review.yml) | Claude reviewing PRs against *this codebase's* failure modes — stealth patches that add a detectable artefact, detector signals that would fire on real users, state-machine invariants |
 
 The DAST job has a problem worth reading: **the scanner is a bot, and this repo built
 an anti-bot system.** ZAP trips `probe.silent`, `http.datacenter_asn` and the rate
