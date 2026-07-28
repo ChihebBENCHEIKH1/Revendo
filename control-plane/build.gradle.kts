@@ -15,6 +15,16 @@ val ktorVersion = "3.0.0"
 val coroutinesVersion = "1.9.0"
 
 dependencies {
+    // Pull transitive families to patched versions.
+    //
+    // Ktor 3.0.0 brings Netty 4.1.114 and the Anthropic SDK brings an older Jackson;
+    // both carry fixed HIGH-severity CVEs (netty-codec CVE-2026-42583,
+    // jackson-databind CVE-2026-54512/54513). BOMs rather than single-artifact pins
+    // so the whole family moves together — bumping netty-codec alone while
+    // netty-transport stays behind is how you turn a CVE into a NoSuchMethodError.
+    implementation(platform("io.netty:netty-bom:4.1.133.Final"))
+    implementation(platform("com.fasterxml.jackson:jackson-bom:2.18.8"))
+
     // --- Ktor ---------------------------------------------------------------
     implementation("io.ktor:ktor-server-core:$ktorVersion")
     implementation("io.ktor:ktor-server-netty:$ktorVersion")

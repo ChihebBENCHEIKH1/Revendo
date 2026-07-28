@@ -100,7 +100,10 @@ ps: ## Show service status
 
 screenshot: ## Regenerate the README console image from the live dashboard
 	@mkdir -p docs/img
-	@$(COMPOSE) run --rm -T -v "$$PWD/docs/img:/out" -v "$$PWD/ops:/app/ops:ro" \
+	@# --user root only here: the worker image runs unprivileged (uid 10001), which
+	@# cannot write to a host-owned bind mount. This is a dev utility, not the
+	@# production path, so the override is explicit and scoped to one command.
+	@$(COMPOSE) run --rm -T --user root -v "$$PWD/docs/img:/out" -v "$$PWD/ops:/app/ops:ro" \
 	  worker node /app/ops/screenshot.mjs
 
 console: ## Open the Sentinelle console

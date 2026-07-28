@@ -17,6 +17,15 @@ RUN gradle --no-daemon installDist --quiet
 FROM eclipse-temurin:17-jre-jammy AS runtime
 WORKDIR /app
 
+# Patch the base image before installing anything.
+#
+# Base tags are rebuilt on a schedule, not on every CVE, so an image pulled today
+# routinely carries fixed-but-unapplied vulnerabilities in its OS layer — here that
+# was a CRITICAL in libgnutls30 plus several HIGH. `upgrade` costs one layer and is
+# the difference between a scanner finding real issues and finding none.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
+
 # JRE, not JDK: the compiler has no business in a runtime image.
 COPY --from=build /home/gradle/project/build/install/revendo-control-plane/ ./
 

@@ -17,6 +17,14 @@ FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Patch the base image before installing anything.
+#
+# Base tags are rebuilt on a schedule, not on every CVE, so an image pulled today
+# routinely carries fixed-but-unapplied vulnerabilities in its OS layer — here that
+# was a CRITICAL in libgnutls30 plus several HIGH. `upgrade` costs one layer and is
+# the difference between a scanner finding real issues and finding none.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
 

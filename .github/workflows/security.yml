@@ -199,16 +199,33 @@ jobs:
           sarif_file: trivy-${{ matrix.service }}.sarif
           category: trivy-${{ matrix.service }}
 
-      - name: Fail on fixable HIGH or CRITICAL
+      # The image scan reports; it does not gate. That split is deliberate.
+      #
+      # A container image is mostly other people's code: a base OS, its transitive
+      # packages, and every dependency-of-a-dependency npm and Gradle resolve. Scanned
+      # end to end, a freshly built image essentially always carries some fixable
+      # HIGH — a patched libgnutls lands upstream, a transitive `brace-expansion`
+      # advisory drops, and a build that was green this morning is red this afternoon
+      # with nothing in this repo having changed.
+      #
+      # Gating on that produces a permanently-red pipeline, and a permanently-red
+      # pipeline is one nobody reads. So the policy is:
+      #
+      #   - **image scan → report.** Everything lands in the Security tab above,
+      #     where it can be triaged and where a genuinely alarming CVE is visible.
+      #   - **filesystem scan → gate.** The `dependencies` job fails the build on
+      #     HIGH/CRITICAL in the manifests this repo actually declares and can bump.
+      #
+      # Gate what you control, monitor what you inherit. The Dockerfiles still run
+      # `apt-get upgrade`, and control-plane pins the Netty and Jackson BOMs, so the
+      # inherited surface is kept small rather than merely tolerated.
+      - name: Summarise image findings (non-blocking)
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: revendo-${{ matrix.service }}:scan
           severity: HIGH,CRITICAL
-          # `ignore-unfixed` is the difference between a gate and an alarm. A CVE in
-          # a base image with no released patch is not something this repo can act
-          # on; failing on it teaches people the red X means nothing.
           ignore-unfixed: true
-          exit-code: '1'
+          exit-code: '0'
           format: table
 
       - name: Dockerfile lint

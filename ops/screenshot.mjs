@@ -40,6 +40,11 @@ const chrome = spawn(
 async function waitForDevTools() {
   for (let i = 0; i < 100; i++) {
     try {
+      // The DevTools endpoint is plain HTTP on loopback by design — Chrome does not
+      // serve it over TLS, and this connection never leaves the container. Suppressed
+      // inline with a reason rather than disabled in the ruleset, so the rule keeps
+      // protecting every other fetch in the repo.
+      // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
       const res = await fetch(`http://127.0.0.1:${PORT}/json/version`);
       if (res.ok) return;
     } catch {
