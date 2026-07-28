@@ -24,7 +24,7 @@ on:
 
 concurrency:
   group: security-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -92,6 +92,10 @@ jobs:
   codeql:
     name: sast · codeql · ${{ matrix.language }}
     runs-on: ubuntu-latest
+    # CodeQL on a project this size is minutes. Anything approaching this ceiling is a
+    # hang, not slow analysis, and it should surface as a red X rather than a job that
+    # appears to still be working.
+    timeout-minutes: 25
     permissions:
       contents: read
       security-events: write
@@ -134,7 +138,7 @@ jobs:
       - name: Build for analysis
         if: matrix.build-mode == 'manual'
         working-directory: control-plane
-        run: gradle installDist --console=plain
+        run: gradle installDist --console=plain --no-daemon
 
       - uses: github/codeql-action/analyze@v3
         with:
