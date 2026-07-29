@@ -107,38 +107,23 @@ jobs:
           - language: javascript-typescript
             build-mode: none
           - language: java-kotlin
-            build-mode: manual
+            # Buildless extraction.
+            #
+            # `manual` needs CodeQL to trace a real Gradle build, and that fought this
+            # repo three ways: setup-java gives no Gradle, setup-gradle expects a
+            # wrapper this project deliberately does not have, and CodeQL then waits
+            # for Gradle's daemon to exit, which it never does. `none` reads the
+            # sources directly. Slightly weaker on cross-file dataflow than a traced
+            # build, and vastly better than a leg that never reports at all.
+            build-mode: none
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
-        if: matrix.language == 'java-kotlin'
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      # setup-java provides a JDK, not Gradle — and this repo deliberately has no
-      # wrapper (the Dockerfile builds inside the gradle image instead).
-      #
-      # gradle-version is required for exactly that reason: setup-gradle defaults to
-      # invoking the project's wrapper, so without an explicit version there is still
-      # no `gradle` on PATH and the build step fails the same way it did before.
-      # Pinned to the version the Dockerfile uses, so CI and the image agree.
-      - uses: gradle/actions/setup-gradle@v4
-        if: matrix.language == 'java-kotlin'
-        with:
-          gradle-version: '8.10'
 
       - uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           queries: security-and-quality
-
-      - name: Build for analysis
-        if: matrix.build-mode == 'manual'
-        working-directory: control-plane
-        run: gradle installDist --console=plain --no-daemon
 
       - uses: github/codeql-action/analyze@v3
         with:
