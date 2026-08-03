@@ -1,6 +1,6 @@
 plugins {
-    kotlin("jvm") version "2.0.20"
-    kotlin("plugin.serialization") version "2.0.20"
+    kotlin("jvm") version "2.4.10"
+    kotlin("plugin.serialization") version "2.4.10"
     application
 }
 
@@ -11,8 +11,8 @@ repositories {
     mavenCentral()
 }
 
-val ktorVersion = "3.0.0"
-val coroutinesVersion = "1.9.0"
+val ktorVersion = "3.5.1"
+val coroutinesVersion = "1.11.0"
 
 dependencies {
     // Pull transitive families to patched versions.
@@ -22,8 +22,8 @@ dependencies {
     // jackson-databind CVE-2026-54512/54513). BOMs rather than single-artifact pins
     // so the whole family moves together — bumping netty-codec alone while
     // netty-transport stays behind is how you turn a CVE into a NoSuchMethodError.
-    implementation(platform("io.netty:netty-bom:4.1.133.Final"))
-    implementation(platform("com.fasterxml.jackson:jackson-bom:2.18.8"))
+    implementation(platform("io.netty:netty-bom:4.2.16.Final"))
+    implementation(platform("com.fasterxml.jackson:jackson-bom:2.22.1"))
 
     // --- Ktor ---------------------------------------------------------------
     implementation("io.ktor:ktor-server-core:$ktorVersion")
@@ -38,22 +38,22 @@ dependencies {
 
     // --- Concurrency, serialization ------------------------------------------
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.8.0")
 
     // --- Infrastructure -------------------------------------------------------
-    implementation("com.rabbitmq:amqp-client:5.21.0")
+    implementation("com.rabbitmq:amqp-client:5.34.0")
     // Lettuce over Jedis: its async API is genuinely non-blocking, which matters when
     // the whole service is coroutine-based. A blocking client would force every Redis
     // call onto a thread pool and quietly reintroduce the thread-per-request model
     // coroutines exist to avoid.
     implementation("io.lettuce:lettuce-core:6.4.0.RELEASE")
-    implementation("io.micrometer:micrometer-registry-prometheus:1.13.4")
-    implementation("ch.qos.logback:logback-classic:1.5.8")
+    implementation("io.micrometer:micrometer-registry-prometheus:1.17.0")
+    implementation("ch.qos.logback:logback-classic:1.6.1")
 
     // Anthropic's official Java SDK — Kotlin uses it directly. Only reached when
     // ANTHROPIC_API_KEY is present; the demo's default negotiation path is offline.
-    implementation("com.anthropic:anthropic-java:2.34.0")
+    implementation("com.anthropic:anthropic-java:2.52.0")
 
     // --- Test -----------------------------------------------------------------
     testImplementation(kotlin("test"))
