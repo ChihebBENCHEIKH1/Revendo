@@ -12,7 +12,7 @@
     "test": "node --test --import tsx dist_test_shim.ts 2>/dev/null || tsx --test src/**/*.test.ts"
   },
   "dependencies": {
-    "express": "^4.19.2",
+    "express": "^5.2.1",
     "ioredis": "^5.4.1",
     "pino": "^9.3.2",
     "zod": "^3.23.8"
