@@ -14,7 +14,7 @@ COPY --chown=gradle:gradle src ./src
 RUN gradle --no-daemon installDist --quiet
 
 
-FROM eclipse-temurin:17-jre-jammy AS runtime
+FROM eclipse-temurin:22-jre-jammy AS runtime
 WORKDIR /app
 
 # Patch the base image before installing anything.
